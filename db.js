@@ -8,6 +8,8 @@ const pool = new Pool({
     require: true,
     rejectUnauthorized: false, // Render does not provide CA certs
   },
+  max: 10, // limit number of clients
+  idleTimeoutMillis: 30000,
   // OR specify user, host, database, password, port here
 });
 
