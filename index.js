@@ -12,9 +12,8 @@ const app = express();
 // Middlewares
 app.use(
   cors({
-    origin: "*", // frontend origin
+    origin: "http://localhost:3000", // frontend origin
     credentials: true, // ✅ allow cookies
-    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(express.json());
@@ -116,6 +115,38 @@ app.get("/api/me", authenticate, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ---------------- COMMON SAVE API ----------------
+const allowedTables = ["users", "employees", "customers"]; // whitelist tables
+
+app.post("/api/save", async (req, res) => {
+  try {
+    const { table, data } = req.body;
+
+    if (!table || !data || Object.keys(data).length === 0) {
+      return res.status(400).json({ error: "Table name and data are required" });
+    }
+
+    if (!allowedTables.includes(table)) {
+      return res.status(400).json({ error: "Invalid table name" });
+    }
+
+    const columns = Object.keys(data).join(", ");
+    const values = Object.values(data);
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+
+    const query = `INSERT INTO ${table} (${columns}) VALUES (${placeholders}) RETURNING *`;
+    const result = await pool.query(query, values);
+
+    res.status(201).json({
+      message: "Data inserted successfully",
+      data: result.rows[0],
+    });
+  } catch (err) {
+    console.error("Error inserting data:", err.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
