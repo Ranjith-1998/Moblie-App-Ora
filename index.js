@@ -119,7 +119,7 @@ app.get("/api/me", authenticate, async (req, res) => {
 });
 
 // ---------------- COMMON SAVE API ----------------
-const allowedTables = ["users", "employees", "customers"]; // whitelist tables
+const allowedTables = ["users", "employees", "customers","jobasic"]; // whitelist tables
 
 app.post("/api/save", async (req, res) => {
   try {
