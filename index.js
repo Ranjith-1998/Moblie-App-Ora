@@ -119,7 +119,7 @@ app.get("/api/me", authenticate, async (req, res) => {
 });
 
 // ---------------- COMMON SAVE API ----------------
-const allowedTables = ["users", "employees", "customers","jobasic"]; // whitelist tables
+//const allowedTables = ["users", "employees", "customers","jobasic"]; // whitelist tables
 
 app.post("/api/save", async (req, res) => {
   try {
@@ -129,9 +129,9 @@ app.post("/api/save", async (req, res) => {
       return res.status(400).json({ error: "Table name and data are required" });
     }
 
-    if (!allowedTables.includes(table)) {
-      return res.status(400).json({ error: "Invalid table name" });
-    }
+    //if (!allowedTables.includes(table)) {
+      //return res.status(400).json({ error: "Invalid table name" });
+    //}
 
     const columns = Object.keys(data).join(", ");
     const values = Object.values(data);
