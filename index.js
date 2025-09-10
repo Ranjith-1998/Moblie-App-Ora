@@ -151,7 +151,7 @@ app.post("/api/create-table", async (req, res) => {
     columns.unshift("id SERIAL PRIMARY KEY");
     columns.push("created_on TIMESTAMP DEFAULT now()");
     columns.push("modified_on TIMESTAMP DEFAULT now()");
-    columns.push("versionid UUID DEFAULT uuid_generate_v4()");
+    columns.push("versionid UUID DEFAULT gen_random_uuid()");
 
     const query = `CREATE TABLE IF NOT EXISTS ${safeTable} (${columns.join(", ")})`;
 
