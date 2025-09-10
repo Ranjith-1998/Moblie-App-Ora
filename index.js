@@ -118,6 +118,52 @@ app.get("/api/me", authenticate, async (req, res) => {
   }
 });
 
+// ---------------- CREATE TABLE API ----------------
+app.post("/api/create-table", async (req, res) => {
+  try {
+    const { table, fields } = req.body;
+
+    if (!table || !fields || typeof fields !== "object") {
+      return res.status(400).json({ error: "Table name and fields are required" });
+    }
+
+    // Ensure safe table name (only lowercase letters, numbers, underscores)
+    const safeTable = table.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!safeTable) return res.status(400).json({ error: "Invalid table name" });
+
+    // Build field definitions
+    const columns = [];
+    for (const [col, type] of Object.entries(fields)) {
+      // Whitelist supported types
+      const allowedTypes = ["text", "integer", "numeric", "date", "timestamp", "uuid", "blob"];
+      const normalizedType = type.toLowerCase();
+
+      if (!allowedTypes.includes(normalizedType)) {
+        return res.status(400).json({ error: `Invalid type for ${col}` });
+      }
+
+      // Map blob → BYTEA in PostgreSQL
+      const pgType = normalizedType === "blob" ? "BYTEA" : type.toUpperCase();
+      columns.push(`${col} ${pgType}`);
+    }
+
+    // Add default system columns
+    columns.unshift("id SERIAL PRIMARY KEY");
+    columns.push("created_on TIMESTAMP DEFAULT now()");
+    columns.push("modified_on TIMESTAMP DEFAULT now()");
+    columns.push("versionid UUID DEFAULT uuid_generate_v4()");
+
+    const query = `CREATE TABLE IF NOT EXISTS ${safeTable} (${columns.join(", ")})`;
+
+    await pool.query(query);
+
+    res.status(201).json({ success: true, message: `Table '${safeTable}' created with default columns` });
+  } catch (err) {
+    console.error("Table create error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------- COMMON SAVE API ----------------
 //const allowedTables = ["users", "employees", "customers","jobasic"]; // whitelist tables
 
