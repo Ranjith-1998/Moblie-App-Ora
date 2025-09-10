@@ -153,11 +153,24 @@ app.post("/api/create-table", async (req, res) => {
     columns.push("modified_on TIMESTAMP DEFAULT now()");
     columns.push("versionid UUID DEFAULT gen_random_uuid()");
 
+    
     const query = `CREATE TABLE IF NOT EXISTS ${safeTable} (${columns.join(", ")})`;
 
+    // 1️⃣ Create the actual form table
     await pool.query(query);
 
-    res.status(201).json({ success: true, message: `Table '${safeTable}' created with default columns` });
+    // 2️⃣ Insert into txmaster and return the new row
+    const { rows } = await pool.query(
+      `INSERT INTO txmaster (eform_name, dbname) 
+       VALUES ($1, $2) RETURNING id, eform_name, dbname, created_on`,
+      [eform_name, safeTable]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `Table '${safeTable}' created and registered in txmaster`,
+      txmaster: rows[0]  // includes id, eform_name, dbname, created_on
+    });
   } catch (err) {
     console.error("Table create error:", err);
     res.status(500).json({ error: err.message });
