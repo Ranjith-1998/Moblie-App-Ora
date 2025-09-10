@@ -121,7 +121,7 @@ app.get("/api/me", authenticate, async (req, res) => {
 // ---------------- CREATE TABLE API ----------------
 app.post("/api/create-table", async (req, res) => {
   try {
-    const { table, fields } = req.body;
+    const {eform_name, table, fields } = req.body;
 
     if (!table || !fields || typeof fields !== "object") {
       return res.status(400).json({ error: "Table name and fields are required" });
