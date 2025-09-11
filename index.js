@@ -180,11 +180,16 @@ app.post("/api/create-table", async (req, res) => {
 // ---------------- COMMON SAVE API ----------------
 app.post("/api/save", async (req, res) => {
   try {
-    const { table, action, data,query } = req.body;
+    const { table, action, data, query } = req.body;
 
-    if (!table || !action) {
-      return res.status(400).json({ error: "Table name and action are required" });
-    }
+if (!action) {
+  return res.status(400).json({ error: "Action is required" });
+}
+
+// only enforce table name when action is NOT "read" with custom query
+if (action !== "read" && !table) {
+  return res.status(400).json({ error: "Table name is required" });
+}
 
     // TODO: whitelist allowed tables to prevent SQL injection
     // const allowedTables = ["users", "orders", "products"];
