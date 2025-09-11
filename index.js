@@ -210,11 +210,16 @@ app.post("/api/save", async (req, res) => {
       });
     }
 
-    if (action === "read") {
-      const sql = `SELECT * FROM ${table}`;
-      const result = await pool.query(sql);
-      return res.json(result.rows);
-    }
+   if (action === "read") {
+  if (!req.body.query) {
+    return res.status(400).json({ error: "query is required for read action" });
+  }
+
+  const sql = req.body.query;
+  const result = await pool.query(sql);
+
+  return res.json(result.rows);
+}
 
     if (action === "update") {
       if (!data || !data.id) {
