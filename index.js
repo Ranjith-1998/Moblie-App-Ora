@@ -180,7 +180,7 @@ app.post("/api/create-table", async (req, res) => {
 // ---------------- COMMON SAVE API ----------------
 app.post("/api/save", async (req, res) => {
   try {
-    const { table, action, data } = req.body;
+    const { table, action, data,query } = req.body;
 
     if (!table || !action) {
       return res.status(400).json({ error: "Table name and action are required" });
