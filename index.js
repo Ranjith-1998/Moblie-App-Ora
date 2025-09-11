@@ -178,34 +178,88 @@ app.post("/api/create-table", async (req, res) => {
 });
 
 // ---------------- COMMON SAVE API ----------------
-//const allowedTables = ["users", "employees", "customers","jobasic"]; // whitelist tables
-
 app.post("/api/save", async (req, res) => {
   try {
-    const { table, data } = req.body;
+    const { table, action, data } = req.body;
 
-    if (!table || !data || Object.keys(data).length === 0) {
-      return res.status(400).json({ error: "Table name and data are required" });
+    if (!table || !action) {
+      return res.status(400).json({ error: "Table name and action are required" });
     }
 
-    //if (!allowedTables.includes(table)) {
-      //return res.status(400).json({ error: "Invalid table name" });
-    //}
+    // TODO: whitelist allowed tables to prevent SQL injection
+    // const allowedTables = ["users", "orders", "products"];
+    // if (!allowedTables.includes(table)) {
+    //   return res.status(400).json({ error: "Invalid table name" });
+    // }
 
-    const columns = Object.keys(data).join(", ");
-    const values = Object.values(data);
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+    if (action === "create") {
+      if (!data || Object.keys(data).length === 0) {
+        return res.status(400).json({ error: "Data is required for create" });
+      }
 
-    const query = `INSERT INTO ${table} (${columns}) VALUES (${placeholders}) RETURNING *`;
-    const result = await pool.query(query, values);
+      const fields = Object.keys(data).join(", ");
+      const values = Object.values(data);
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
 
-    res.status(201).json({
-      message: "Data inserted successfully",
-      data: result.rows[0],
-    });
+      const sql = `INSERT INTO ${table} (${fields}) VALUES (${placeholders}) RETURNING *`;
+      const result = await pool.query(sql, values);
+
+      return res.status(201).json({
+        message: "Data inserted successfully",
+        data: result.rows[0],
+      });
+    }
+
+    if (action === "read") {
+      const sql = `SELECT * FROM ${table}`;
+      const result = await pool.query(sql);
+      return res.json(result.rows);
+    }
+
+    if (action === "update") {
+      if (!data || !data.id) {
+        return res.status(400).json({ error: "id is required for update" });
+      }
+
+      const id = data.id;
+      delete data.id;
+
+      if (Object.keys(data).length === 0) {
+        return res.status(400).json({ error: "No fields provided to update" });
+      }
+
+      const setStr = Object.keys(data)
+        .map((k, i) => `${k}=$${i + 1}`)
+        .join(", ");
+      const values = [...Object.values(data), id];
+
+      const sql = `UPDATE ${table} SET ${setStr} WHERE id=$${values.length} RETURNING *`;
+      const result = await pool.query(sql, values);
+
+      return res.json({
+        message: "Data updated successfully",
+        data: result.rows[0],
+      });
+    }
+
+    if (action === "delete") {
+      if (!data || !data.id) {
+        return res.status(400).json({ error: "id is required for delete" });
+      }
+
+      const sql = `DELETE FROM ${table} WHERE id=$1 RETURNING *`;
+      const result = await pool.query(sql, [data.id]);
+
+      return res.json({
+        message: "Data deleted successfully",
+        data: result.rows[0],
+      });
+    }
+
+    return res.status(400).json({ error: "Invalid action" });
   } catch (err) {
-    console.error("Error inserting data:", err.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Internal server error", details: err.message });
   }
 });
 
