@@ -178,98 +178,85 @@ app.post("/api/create-table", async (req, res) => {
 });
 
 // ---------------- COMMON SAVE API ----------------
+// CREATE
 app.post("/api/save", async (req, res) => {
   try {
-    const { table, action, data, query } = req.body;
-
-if (!action) {
-  return res.status(400).json({ error: "Action is required" });
-}
-
-// only enforce table name when action is NOT "read" with custom query
-if (action !== "read" && !table) {
-  return res.status(400).json({ error: "Table name is required" });
-}
-
-    // TODO: whitelist allowed tables to prevent SQL injection
-    // const allowedTables = ["users", "orders", "products"];
-    // if (!allowedTables.includes(table)) {
-    //   return res.status(400).json({ error: "Invalid table name" });
-    // }
-
-    if (action === "create") {
-      if (!data || Object.keys(data).length === 0) {
-        return res.status(400).json({ error: "Data is required for create" });
-      }
-
-      const fields = Object.keys(data).join(", ");
-      const values = Object.values(data);
-      const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
-
-      const sql = `INSERT INTO ${table} (${fields}) VALUES (${placeholders}) RETURNING *`;
-      const result = await pool.query(sql, values);
-
-      return res.status(201).json({
-        message: "Data inserted successfully",
-        data: result.rows[0],
-      });
+    const { table, data } = req.body;
+    if (!table || !data) {
+      return res.status(400).json({ error: "Table and data are required" });
     }
 
-   if (action === "read") {
-  if (!req.body.query) {
-    return res.status(400).json({ error: "query is required for read action" });
-  }
+    const fields = Object.keys(data).join(", ");
+    const values = Object.values(data);
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
 
-  const sql = req.body.query;
-  const result = await pool.query(sql);
+    const sql = `INSERT INTO ${table} (${fields}) VALUES (${placeholders}) RETURNING *`;
+    const result = await pool.query(sql, values);
 
-  return res.json(result.rows);
-}
-
-    if (action === "update") {
-      if (!data || !data.id) {
-        return res.status(400).json({ error: "id is required for update" });
-      }
-
-      const id = data.id;
-      delete data.id;
-
-      if (Object.keys(data).length === 0) {
-        return res.status(400).json({ error: "No fields provided to update" });
-      }
-
-      const setStr = Object.keys(data)
-        .map((k, i) => `${k}=$${i + 1}`)
-        .join(", ");
-      const values = [...Object.values(data), id];
-
-      const sql = `UPDATE ${table} SET ${setStr} WHERE id=$${values.length} RETURNING *`;
-      const result = await pool.query(sql, values);
-
-      return res.json({
-        message: "Data updated successfully",
-        data: result.rows[0],
-      });
-    }
-
-    if (action === "delete") {
-      if (!data || !data.id) {
-        return res.status(400).json({ error: "id is required for delete" });
-      }
-
-      const sql = `DELETE FROM ${table} WHERE id=$1 RETURNING *`;
-      const result = await pool.query(sql, [data.id]);
-
-      return res.json({
-        message: "Data deleted successfully",
-        data: result.rows[0],
-      });
-    }
-
-    return res.status(400).json({ error: "Invalid action" });
+    res.status(201).json({ message: "Row inserted", data: result.rows[0] });
   } catch (err) {
-    console.error("Database error:", err);
-    res.status(500).json({ error: "Internal server error", details: err.message });
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// READ
+app.post("/api/read", async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) {
+      return res.status(400).json({ error: "Query is required" });
+    }
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// UPDATE
+app.put("/api/update", async (req, res) => {
+  try {
+    const { table, data } = req.body;
+    if (!table || !data || !data.id) {
+      return res.status(400).json({ error: "Table and id required" });
+    }
+
+    const id = data.id;
+    delete data.id;
+
+    const setStr = Object.keys(data)
+      .map((k, i) => `${k}=$${i + 1}`)
+      .join(", ");
+    const values = [...Object.values(data), id];
+
+    const sql = `UPDATE ${table} SET ${setStr} WHERE id=$${values.length} RETURNING *`;
+    const result = await pool.query(sql, values);
+
+    res.json({ message: "Row updated", data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE
+app.delete("/api/delete", async (req, res) => {
+  try {
+    const { table, id } = req.body;
+    if (!table || !id) {
+      return res.status(400).json({ error: "Table and id required" });
+    }
+
+    const sql = `DELETE FROM ${table} WHERE id=$1 RETURNING *`;
+    const result = await pool.query(sql, [id]);
+
+    res.json({ message: "Row deleted", data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
