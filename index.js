@@ -60,11 +60,11 @@ app.post("/api/login", async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [
       email,
     ]);
-    if (!rows.length) return res.status(400).json({ error: "Invalid credentials" });
+    if (!rows.length) return res.status(400).json({ error: "Invalid Username" });
 
     const user = rows[0];
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(400).json({ error: "Invalid credentials" });
+    if (!ok) return res.status(400).json({ error: "Invalid Password" });
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "1h" });
 
