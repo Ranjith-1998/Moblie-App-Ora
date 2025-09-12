@@ -253,15 +253,19 @@ app.put("/api/update", async (req, res) => {
 // DELETE
 app.delete("/api/delete", async (req, res) => {
   try {
-    const { table, id } = req.body;
-    if (!table || !id) {
-      return res.status(400).json({ error: "Table and id required" });
+    const { table, where } = req.body;
+
+    if (!table || !where) {
+      return res.status(400).json({ error: "Table and WHERE condition are required" });
     }
 
-    const sql = `DELETE FROM ${table} WHERE id=$1 RETURNING *`;
-    const result = await pool.query(sql, [id]);
+    const sql = `DELETE FROM ${table} WHERE ${where} RETURNING *`;
+    const result = await pool.query(sql);
 
-    res.json({ message: "Row deleted", data: result.rows[0] });
+    res.json({
+      message: "Rows deleted successfully",
+      data: result.rows,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
