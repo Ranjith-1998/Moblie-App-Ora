@@ -219,23 +219,31 @@ app.post("/api/read", async (req, res) => {
 // UPDATE
 app.put("/api/update", async (req, res) => {
   try {
-    const { table, data } = req.body;
-    if (!table || !data || !data.id) {
-      return res.status(400).json({ error: "Table and id required" });
+    const { table, data, where } = req.body;
+
+    if (!table || !data || Object.keys(data).length === 0) {
+      return res.status(400).json({ error: "Table and data are required" });
     }
 
-    const id = data.id;
-    delete data.id;
+    if (!where) {
+      return res.status(400).json({ error: "WHERE condition is required to prevent updating all rows" });
+    }
 
-    const setStr = Object.keys(data)
-      .map((k, i) => `${k}=$${i + 1}`)
-      .join(", ");
-    const values = [...Object.values(data), id];
+    // Build SET part
+    const setKeys = Object.keys(data);
+    const setValues = Object.values(data);
+    const setStr = setKeys.map((k, i) => `${k}=$${i + 1}`).join(", ");
 
-    const sql = `UPDATE ${table} SET ${setStr} WHERE id=$${values.length} RETURNING *`;
-    const result = await pool.query(sql, values);
+    // Build WHERE part
+    // If you pass as string: "state='Tamil Nadu' AND city='Chennai'"
+    const sql = `UPDATE ${table} SET ${setStr} WHERE ${where} RETURNING *`;
 
-    res.json({ message: "Row updated", data: result.rows[0] });
+    const result = await pool.query(sql, setValues);
+
+    res.json({
+      message: "Rows updated successfully",
+      data: result.rows,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
