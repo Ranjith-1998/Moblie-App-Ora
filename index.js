@@ -130,65 +130,75 @@ app.post("/api/create-table", async (req, res) => {
     const safeTable = table.toLowerCase().replace(/[^a-z0-9_]/g, "");
     if (!safeTable) return res.status(400).json({ error: "Invalid table name" });
 
-    // ✅ Check if table already registered in txmaster
-    const existing = await pool.query(
-      `SELECT * FROM txmaster WHERE dbname = $1`,
-      [safeTable]
+    // ✅ Check if table exists in database
+    const tableExists = await pool.query(
+      `SELECT to_regclass($1) as exists`, [safeTable]
     );
 
-    if (existing.rows.length > 0) {
-      return res.status(400).json({
-        error: `'${safeTable}' already exists`
-      });
-    }
+    if (tableExists.rows[0].exists) {
+      // Table exists → Add missing fields
+      for (const [col, type] of Object.entries(fields)) {
+        const normalizedType = type.toLowerCase();
+        const allowedTypes = ["text", "integer", "numeric", "date", "timestamp", "uuid", "blob"];
+        if (!allowedTypes.includes(normalizedType)) {
+          return res.status(400).json({ error: `Invalid type for ${col}` });
+        }
+        const pgType = normalizedType === "blob" ? "BYTEA" : type.toUpperCase();
 
-    // Build field definitions for CREATE TABLE
-    const columns = [];
-    for (const [col, type] of Object.entries(fields)) {
-      const allowedTypes = ["text", "integer", "numeric", "date", "timestamp", "uuid", "blob"];
-      const normalizedType = type.toLowerCase();
-
-      if (!allowedTypes.includes(normalizedType)) {
-        return res.status(400).json({ error: `Invalid type for ${col}` });
+        // Add column if not already there
+        await pool.query(
+          `ALTER TABLE ${safeTable} ADD COLUMN IF NOT EXISTS ${col} ${pgType}`
+        );
       }
 
+      // Update metadata
+      await pool.query(
+        `UPDATE eform_metadata 
+         SET fields = fields || $1::jsonb
+         WHERE dbname = $2`,
+        [JSON.stringify(fields), safeTable]
+      );
+
+      return res.json({ success: true, message: `Fields added to existing table '${safeTable}'` });
+    }
+
+    // 🚀 Table does not exist → Create new table
+    const columns = [];
+    for (const [col, type] of Object.entries(fields)) {
+      const normalizedType = type.toLowerCase();
       const pgType = normalizedType === "blob" ? "BYTEA" : type.toUpperCase();
       columns.push(`${col} ${pgType}`);
     }
 
-    // Add system columns
+    // System columns
     columns.unshift("id SERIAL PRIMARY KEY");
     columns.push("created_on TIMESTAMP DEFAULT now()");
     columns.push("modified_on TIMESTAMP DEFAULT now()");
     columns.push("versionid UUID DEFAULT gen_random_uuid()");
 
-    const query = `CREATE TABLE IF NOT EXISTS ${safeTable} (${columns.join(", ")})`;
+    const createQuery = `CREATE TABLE ${safeTable} (${columns.join(", ")})`;
+    await pool.query(createQuery);
 
-    // 1️⃣ Create actual table
-    await pool.query(query);
-
-    // 2️⃣ Insert into txmaster
     await pool.query(
       `INSERT INTO txmaster (eform_name, dbname) VALUES ($1, $2)`,
       [eform_name, safeTable]
     );
 
-    // 3️⃣ Insert into eform_metadata
     await pool.query(
-      `INSERT INTO eform_metadata (eform_name, dbname, fields) VALUES ($1, $2, $3)`,
-      [eform_name, safeTable, fields]
+      `INSERT INTO eform_metadata (eform_name, dbname, fields) VALUES ($1, $2, $3::jsonb)`,
+      [eform_name, safeTable, JSON.stringify(fields)]
     );
 
     res.status(201).json({
       success: true,
-      message: `Table '${safeTable}' created and registered in txmaster & eform_metadata`
+      message: `Table '${safeTable}' created successfully`
     });
+
   } catch (err) {
     console.error("Table create error:", err);
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // ---------------- COMMON SAVE API ----------------
 // CREATE
