@@ -272,6 +272,49 @@ app.delete("/api/delete", async (req, res) => {
   }
 });
 
+// ---------------- Menu Click ------------------
+
+app.get("/menuclick/:id", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+
+    // 1. Fetch stored SQL for this menu ID
+    const sqlQuery = await client.query(
+      "SELECT sql FROM menuclicksql WHERE menucliksqlid = $1",
+      [id]
+    );
+
+    if (sqlQuery.rows.length === 0) {
+      return res.status(404).json({ error: "No SQL found for this menu ID" });
+    }
+
+    const sqlToRun = sqlQuery.rows[0].menu_sql;
+
+    // 🔒 Safety check → only allow SELECT queries
+    if (!/^select/i.test(sqlToRun.trim())) {
+      return res
+        .status(400)
+        .json({ error: "Only SELECT queries are allowed." });
+    }
+
+    // 2. Execute stored SQL
+    const result = await client.query(sqlToRun);
+
+    // 3. Send back JSON result
+    res.json({
+      menu_id: id,
+      rows: result.rows,
+      count: result.rowCount,
+    });
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ error: "Database execution error" });
+  } finally {
+    client.release();
+  }
+});
+
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
