@@ -121,20 +121,30 @@ app.get("/api/me", authenticate, async (req, res) => {
 // ---------------- CREATE TABLE API ----------------
 app.post("/api/create-table", async (req, res) => {
   try {
-    const {eform_name, table, fields } = req.body;
+    const { eform_name, table, fields } = req.body;
 
-    if (!table || !fields || typeof fields !== "object") {
-      return res.status(400).json({ error: "Table name and fields are required" });
+    if (!eform_name || !table || !fields || typeof fields !== "object") {
+      return res.status(400).json({ error: "eform_name, table and fields are required" });
     }
 
-    // Ensure safe table name (only lowercase letters, numbers, underscores)
     const safeTable = table.toLowerCase().replace(/[^a-z0-9_]/g, "");
     if (!safeTable) return res.status(400).json({ error: "Invalid table name" });
 
-    // Build field definitions
+    // ✅ Check if table already registered in txmaster
+    const existing = await pool.query(
+      `SELECT * FROM txmaster WHERE dbname = $1`,
+      [safeTable]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({
+        error: `Table '${safeTable}' already exists in txmaster`
+      });
+    }
+
+    // Build field definitions for CREATE TABLE
     const columns = [];
     for (const [col, type] of Object.entries(fields)) {
-      // Whitelist supported types
       const allowedTypes = ["text", "integer", "numeric", "date", "timestamp", "uuid", "blob"];
       const normalizedType = type.toLowerCase();
 
@@ -142,46 +152,43 @@ app.post("/api/create-table", async (req, res) => {
         return res.status(400).json({ error: `Invalid type for ${col}` });
       }
 
-      // Map blob → BYTEA in PostgreSQL
       const pgType = normalizedType === "blob" ? "BYTEA" : type.toUpperCase();
       columns.push(`${col} ${pgType}`);
     }
 
-    // Add default system columns
+    // Add system columns
     columns.unshift("id SERIAL PRIMARY KEY");
     columns.push("created_on TIMESTAMP DEFAULT now()");
     columns.push("modified_on TIMESTAMP DEFAULT now()");
     columns.push("versionid UUID DEFAULT gen_random_uuid()");
 
-    
     const query = `CREATE TABLE IF NOT EXISTS ${safeTable} (${columns.join(", ")})`;
 
-    // 1️⃣ Create the actual form table
+    // 1️⃣ Create actual table
     await pool.query(query);
 
-    // 2️⃣ Insert into txmaster and return the new row
-    const { rows } = await pool.query(
-      `INSERT INTO txmaster (eform_name, dbname) 
-       VALUES ($1, $2) RETURNING id, eform_name, dbname, created_on`,
+    // 2️⃣ Insert into txmaster
+    await pool.query(
+      `INSERT INTO txmaster (eform_name, dbname) VALUES ($1, $2)`,
       [eform_name, safeTable]
     );
 
-    // 3️⃣ Insert schema into eform_metadata
+    // 3️⃣ Insert into eform_metadata
     await pool.query(
       `INSERT INTO eform_metadata (eform_name, dbname, fields) VALUES ($1, $2, $3)`,
       [eform_name, safeTable, fields]
     );
-    
+
     res.status(201).json({
       success: true,
-      message: `Table '${safeTable}' created and registered in txmaster`,
-      txmaster: rows[0]  // includes id, eform_name, dbname, created_on
+      message: `Table '${safeTable}' created and registered in txmaster & eform_metadata`
     });
   } catch (err) {
     console.error("Table create error:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // ---------------- COMMON SAVE API ----------------
 // CREATE
