@@ -138,7 +138,7 @@ app.post("/api/create-table", async (req, res) => {
 
     if (existing.rows.length > 0) {
       return res.status(400).json({
-        error: `Table '${safeTable}' already exists in txmaster`
+        error: `'${safeTable}' already exists`
       });
     }
 
