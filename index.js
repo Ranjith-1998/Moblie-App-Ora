@@ -166,6 +166,12 @@ app.post("/api/create-table", async (req, res) => {
       [eform_name, safeTable]
     );
 
+    // 3️⃣ Insert schema into eform_metadata
+    await pool.query(
+      `INSERT INTO eform_metadata (eform_name, dbname, fields) VALUES ($1, $2, $3)`,
+      [eform_name, safeTable, fields]
+    );
+    
     res.status(201).json({
       success: true,
       message: `Table '${safeTable}' created and registered in txmaster`,
