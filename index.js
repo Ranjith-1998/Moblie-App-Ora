@@ -171,7 +171,7 @@ app.post("/api/create-table", async (req, res) => {
     }
 
     // System columns
-    columns.unshift("${safeTable}id SERIAL PRIMARY KEY");
+    columns.unshift(`${safeTable}id SERIAL PRIMARY KEY`);
     columns.push("created_on TIMESTAMP DEFAULT now()");
     columns.push("modified_on TIMESTAMP DEFAULT now()");
     columns.push("versionid UUID DEFAULT gen_random_uuid()");
