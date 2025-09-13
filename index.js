@@ -274,15 +274,15 @@ app.delete("/api/delete", async (req, res) => {
 
 // ---------------- Menu Click ------------------
 
-app.get("/menuclick/:id", async (req, res) => {
+app.get("/menuclick/:transid", async (req, res) => {
   const client = await pool.connect();
   try {
-    const { id } = req.params;
+    const { transid } = req.params;
 
     // 1. Fetch stored SQL for this menu ID
     const sqlQuery = await client.query(
-      "SELECT sql FROM menuclicksql WHERE menucliksqlid = $1",
-      [id]
+      "SELECT sql FROM menuclicksql WHERE transid = $1",
+      [transid]
     );
 
     if (sqlQuery.rows.length === 0) {
