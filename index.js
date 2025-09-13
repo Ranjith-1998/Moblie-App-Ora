@@ -289,7 +289,7 @@ app.get("/menuclick/:transid", async (req, res) => {
       return res.status(404).json({ error: "No SQL found for this menu ID" });
     }
 
-    const sqlToRun = sqlQuery.rows[0].menu_sql;
+    const sqlToRun = sqlQuery.rows[0].sql; // ✅ use correct column name
 
     // 🔒 Safety check → only allow SELECT queries
     if (!/^select/i.test(sqlToRun.trim())) {
@@ -303,12 +303,12 @@ app.get("/menuclick/:transid", async (req, res) => {
 
     // 3. Send back JSON result
     res.json({
-      menu_id: id,
+      menu_id: transid, // ✅ fixed id bug
       rows: result.rows,
       count: result.rowCount,
     });
   } catch (err) {
-    console.error("Error:", err);
+    console.error("Error:", err.message);
     res.status(500).json({ error: "Database execution error" });
   } finally {
     client.release();
