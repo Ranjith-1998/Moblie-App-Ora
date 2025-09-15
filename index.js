@@ -341,34 +341,79 @@ app.get("/api/menuclick/:transid", async (req, res) => {
 // -------------------- Report SQL ----------------------
 
 app.get("/api/report/:reportslug", async (req, res) => {
-  const { reportslug } = req.params;
-
+  const client = await pool.connect();
   try {
-    // 1️⃣ Get SQL text safely from reports table
-    const [rows] = await pool.query(
+    const { reportslug } = req.params;
+
+    // 1️⃣ Fetch the stored SQL for this report
+    const sqlQuery = await client.query(
       "SELECT sql FROM reportsql WHERE reportslug = $1",
       [reportslug]
     );
 
-    if (rows.length === 0) {
+    if (sqlQuery.rows.length === 0) {
       return res.status(404).json({ error: "Report not found" });
     }
 
-    const reportSQL = rows[0].sql.trim();  // ✅ correct column name
+    const reportSQL = sqlQuery.rows[0].sql?.trim();
 
-    // 2️⃣ Run the stored query
-    const [result] = await pool.query(reportSQL);
+    if (!reportSQL) {
+      return res.status(400).json({ error: "Stored SQL is empty" });
+    }
 
-    // 3️⃣ Return result
+    // 🔒 Safety check → only allow SELECT queries
+    if (!/^select\s+/i.test(reportSQL)) {
+      return res.status(400).json({ error: "Only SELECT queries are allowed." });
+    }
+
+    // 2️⃣ Execute the stored query
+    const result = await client.query(reportSQL);
+
+    // 3️⃣ Send back JSON result
     res.json({
       reportslug,
-      rows: result,
+      query: reportSQL,       // helpful for debugging
+      rows: result.rows,
+      count: result.rowCount,
     });
   } catch (err) {
     console.error("❌ Error fetching report:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Database execution error" });
+  } finally {
+    client.release();
   }
 });
+
+
+// app.get("/api/report/:reportslug", async (req, res) => {
+//   const { reportslug } = req.params;
+
+//   try {
+//     // 1️⃣ Get SQL text safely from reports table
+//     const [rows] = await pool.query(
+//       "SELECT sql FROM reportsql WHERE reportslug = $1",
+//       [reportslug]
+//     );
+
+//     if (rows.length === 0) {
+//       return res.status(404).json({ error: "Report not found" });
+//     }
+
+//     const reportSQL = rows[0].sql.trim();  // ✅ correct column name
+
+//     // 2️⃣ Run the stored query
+//     const [result] = await pool.query(reportSQL);
+
+//     // 3️⃣ Return result
+//     res.json({
+//       reportslug,
+//       rows: result,
+//     });
+//   } catch (err) {
+//     console.error("❌ Error fetching report:", err.message);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 
 // ---------------- START SERVER ----------------
