@@ -344,7 +344,7 @@ app.get("/api/report/:reportslug", async (req, res) => {
   const { reportslug } = req.params;
 
   try {
-    // 1️⃣ Get SQL text safely from reports table
+    // 1️⃣ Fetch the stored SQL
     const [rows] = await pool.query(
       "SELECT sql FROM reportsql WHERE reportslug = ?",
       [reportslug]
@@ -354,27 +354,39 @@ app.get("/api/report/:reportslug", async (req, res) => {
       return res.status(404).json({ error: "Report not found" });
     }
 
-    const reportSQL = rows[0].sql;  // ✅ correct column name
+    const reportSQL = rows[0].sql?.trim();
+    if (!reportSQL) {
+      return res.status(400).json({ error: "Empty SQL for this report" });
+    }
 
-    // ⚠️ SECURITY WARNING:
-    // Only allow execution of pre-approved SELECT queries
-    if (!reportSQL.trim().toLowerCase().startsWith("select")) {
+    console.log("📜 Report SQL:", reportSQL);
+
+    // 2️⃣ Allow only SELECT queries
+    if (!reportSQL.toLowerCase().startsWith("select")) {
       return res.status(400).json({ error: "Only SELECT queries are allowed" });
     }
 
-    // 2️⃣ Run the stored query
-    const [result] = await pool.query(reportSQL);
+    // 3️⃣ Run the query
+    let result;
+    try {
+      [result] = await pool.query(reportSQL);
+    } catch (sqlErr) {
+      console.error("❌ SQL Execution Error:", sqlErr.message);
+      return res.status(400).json({ error: "Invalid SQL: " + sqlErr.message });
+    }
 
-    // 3️⃣ Return result
+    // 4️⃣ Return result
     res.json({
       reportslug,
       rows: result,
     });
+
   } catch (err) {
-    console.error("❌ Error fetching report:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("❌ Server Error:", err.message);
+    res.status(500).json({ error: "Server error: " + err.message });
   }
 });
+
 
 
 // ---------------- START SERVER ----------------
