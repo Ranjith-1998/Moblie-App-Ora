@@ -344,9 +344,9 @@ app.get("/api/report/:reportslug", async (req, res) => {
   const { reportslug } = req.params;
 
   try {
-    // 1️⃣ Get SQL string from reports table
+    // 1️⃣ Get SQL text safely from reports table
     const [rows] = await pool.query(
-      "select sql from reportsql rs where rs.reportslug = ?",
+      "SELECT sql FROM reportsql WHERE reportslug = ?",
       [reportslug]
     );
 
@@ -354,21 +354,28 @@ app.get("/api/report/:reportslug", async (req, res) => {
       return res.status(404).json({ error: "Report not found" });
     }
 
-    const reportSQL = rows[0].query_text;
+    const reportSQL = rows[0].sql;  // ✅ correct column name
 
-    // 2️⃣ Run that SQL
+    // ⚠️ SECURITY WARNING:
+    // Only allow execution of pre-approved SELECT queries
+    if (!reportSQL.trim().toLowerCase().startsWith("select")) {
+      return res.status(400).json({ error: "Only SELECT queries are allowed" });
+    }
+
+    // 2️⃣ Run the stored query
     const [result] = await pool.query(reportSQL);
 
-    // 3️⃣ Send result
+    // 3️⃣ Return result
     res.json({
       reportslug,
       rows: result,
     });
   } catch (err) {
-    console.error("Error fetching report:", err);
-    res.status(500).json({ error: "Failed to fetch report" });
+    console.error("❌ Error fetching report:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
+
 
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
