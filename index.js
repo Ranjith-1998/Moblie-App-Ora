@@ -297,7 +297,7 @@ app.delete("/api/delete", async (req, res) => {
 
 // ---------------- Menu Click ------------------
 
-app.get("/menuclick/:transid", async (req, res) => {
+app.get("/api/menuclick/:transid", async (req, res) => {
   const client = await pool.connect();
   try {
     const { transid } = req.params;
@@ -335,6 +335,38 @@ app.get("/menuclick/:transid", async (req, res) => {
     res.status(500).json({ error: "Database execution error" });
   } finally {
     client.release();
+  }
+});
+
+// -------------------- Report SQL ----------------------
+
+app.get("/api/report/:reportslug", async (req, res) => {
+  const { reportslug } = req.params;
+
+  try {
+    // 1️⃣ Get SQL string from reports table
+    const [rows] = await pool.query(
+      "select sql from reportsql rs where rs.reportslug = ?",
+      [reportslug]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    const reportSQL = rows[0].query_text;
+
+    // 2️⃣ Run that SQL
+    const [result] = await pool.query(reportSQL);
+
+    // 3️⃣ Send result
+    res.json({
+      reportId,
+      rows: result,
+    });
+  } catch (err) {
+    console.error("Error fetching report:", err);
+    res.status(500).json({ error: "Failed to fetch report" });
   }
 });
 
