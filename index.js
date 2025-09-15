@@ -354,7 +354,7 @@ app.get("/api/report/:reportslug", async (req, res) => {
       return res.status(404).json({ error: "Report not found" });
     }
 
-    const reportSQL = rows[0].sql;  // ✅ correct column name
+    const reportSQL = rows[0].reportsql;  // ✅ correct column name
 
     // ⚠️ SECURITY WARNING:
     // Only allow execution of pre-approved SELECT queries
