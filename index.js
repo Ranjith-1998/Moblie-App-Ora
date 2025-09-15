@@ -346,7 +346,7 @@ app.get("/api/report/:reportslug", async (req, res) => {
   try {
     // 1️⃣ Get SQL text safely from reports table
     const [rows] = await pool.query(
-      "SELECT sql FROM reportsql WHERE reportslug = ?",
+      "SELECT sql FROM reportsql WHERE reportslug = $1",
       [reportslug]
     );
 
