@@ -376,10 +376,10 @@ app.get("/api/report/:reportslug", async (req, res) => {
       rows: result.rows,
       count: result.rowCount,
     });
-  } catch (err) {
-    console.error("❌ Error fetching report:", err.message);
-    res.status(500).json({ error: "Database execution error" });
-  } finally {
+ } catch (err) {
+  console.error("❌ Error fetching report:", err); // full error object
+  res.status(500).json({ error: err.message });   // send real DB error
+} finally {
     client.release();
   }
 });
