@@ -356,12 +356,6 @@ app.get("/api/report/:reportslug", async (req, res) => {
 
     const reportSQL = rows[0].sql.trim();  // ✅ correct column name
 
-    // ⚠️ SECURITY WARNING:
-    // Only allow execution of pre-approved SELECT queries
-    if (!reportSQL.trim().toLowerCase().startsWith("select")) {
-      return res.status(400).json({ error: "Only SELECT queries are allowed" });
-    }
-
     // 2️⃣ Run the stored query
     const [result] = await pool.query(reportSQL);
 
