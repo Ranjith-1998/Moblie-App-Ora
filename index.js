@@ -361,7 +361,7 @@ app.get("/api/report/:reportslug", async (req, res) => {
 
     // 3️⃣ Send result
     res.json({
-      reportId,
+      reportslug,
       rows: result,
     });
   } catch (err) {
