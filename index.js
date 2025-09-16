@@ -118,6 +118,304 @@ app.get("/api/me", authenticate, async (req, res) => {
   }
 });
 
+// ---------------- CREATE TABLE API ----------------
+app.post("/api/create-table", async (req, res) => {
+  try {
+    const { eform_name, table, fields } = req.body;
+
+    if (!eform_name || !table || !fields || typeof fields !== "object") {
+      return res.status(400).json({ error: "eform_name, table and fields are required" });
+    }
+
+    const safeTable = table.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!safeTable) return res.status(400).json({ error: "Invalid table name" });
+
+    // ✅ Check if table exists in database
+    const tableExists = await pool.query(
+      `SELECT to_regclass($1) as exists`, [safeTable]
+    );
+
+    if (tableExists.rows[0].exists) {
+      // Table exists → Add missing fields
+      for (const [col, type] of Object.entries(fields)) {
+        const normalizedType = type.toLowerCase();
+        const allowedTypes = ["text", "integer", "numeric", "date", "timestamp", "uuid", "blob"];
+        if (!allowedTypes.includes(normalizedType)) {
+          return res.status(400).json({ error: `Invalid type for ${col}` });
+        }
+        const pgType = normalizedType === "blob" ? "BYTEA" : type.toUpperCase();
+
+        // Add column if not already there
+        await pool.query(
+          `ALTER TABLE ${safeTable} ADD COLUMN IF NOT EXISTS ${col} ${pgType}`
+        );
+      }
+
+      // Update metadata
+      await pool.query(
+        `UPDATE eform_metadata 
+         SET fields = fields || $1::jsonb
+         WHERE dbname = $2`,
+        [JSON.stringify(fields), safeTable]
+      );
+
+      return res.json({ success: true, message: `Fields added to existing table '${safeTable}'` });
+    }
+
+    // 🚀 Table does not exist → Create new table
+    const columns = [];
+    for (const [col, type] of Object.entries(fields)) {
+      const normalizedType = type.toLowerCase();
+      const pgType = normalizedType === "blob" ? "BYTEA" : type.toUpperCase();
+      columns.push(`${col} ${pgType}`);
+    }
+
+    // System columns
+    columns.unshift(`${safeTable}id SERIAL PRIMARY KEY`);
+    columns.push("created_on TIMESTAMP DEFAULT now()");
+    columns.push("modified_on TIMESTAMP DEFAULT now()");
+    columns.push("versionid UUID DEFAULT gen_random_uuid()");
+
+    const createQuery = `CREATE TABLE ${safeTable} (${columns.join(", ")})`;
+    await pool.query(createQuery);
+
+    await pool.query(
+      `INSERT INTO txmaster (eform_name, dbname) VALUES ($1, $2)`,
+      [eform_name, safeTable]
+    );
+
+    await pool.query(
+      `INSERT INTO eform_metadata (eform_name, dbname, fields) VALUES ($1, $2, $3::jsonb)`,
+      [eform_name, safeTable, JSON.stringify(fields)]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: `Table '${safeTable}' created successfully`
+    });
+
+  } catch (err) {
+    console.error("Table create error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------- COMMON SAVE API ----------------
+// CREATE
+app.post("/api/save", async (req, res) => {
+  try {
+    const { table, data } = req.body;
+    if (!table || !data) {
+      return res.status(400).json({ error: "Table and data are required" });
+    }
+
+    const fields = Object.keys(data).join(", ");
+    const values = Object.values(data);
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+
+    const sql = `INSERT INTO ${table} (${fields}) VALUES (${placeholders}) RETURNING *`;
+    const result = await pool.query(sql, values);
+
+    res.status(201).json({ message: "Row inserted", data: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// READ
+app.post("/api/read", async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query) {
+      return res.status(400).json({ error: "Query is required" });
+    }
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// UPDATE
+app.put("/api/update", async (req, res) => {
+  try {
+    const { table, data, where } = req.body;
+
+    if (!table || !data || Object.keys(data).length === 0) {
+      return res.status(400).json({ error: "Table and data are required" });
+    }
+
+    if (!where) {
+      return res.status(400).json({ error: "WHERE condition is required to prevent updating all rows" });
+    }
+
+    // Build SET part
+    const setKeys = Object.keys(data);
+    const setValues = Object.values(data);
+    const setStr = setKeys.map((k, i) => `${k}=$${i + 1}`).join(", ");
+
+    // Build WHERE part
+    // If you pass as string: "state='Tamil Nadu' AND city='Chennai'"
+    const sql = `UPDATE ${table} SET ${setStr} WHERE ${where} RETURNING *`;
+
+    const result = await pool.query(sql, setValues);
+
+    res.json({
+      message: "Rows updated successfully",
+      data: result.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE
+app.delete("/api/delete", async (req, res) => {
+  try {
+    const { table, where } = req.body;
+
+    if (!table || !where) {
+      return res.status(400).json({ error: "Table and WHERE condition are required" });
+    }
+
+    const sql = `DELETE FROM ${table} WHERE ${where} RETURNING *`;
+    const result = await pool.query(sql);
+
+    res.json({
+      message: "Rows deleted successfully",
+      data: result.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------- Menu Click ------------------
+
+app.get("/api/menuclick/:transid", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { transid } = req.params;
+
+    // 1. Fetch stored SQL for this menu ID
+    const sqlQuery = await client.query(
+      "SELECT sql FROM menuclicksql WHERE transid = $1",
+      [transid]
+    );
+
+    if (sqlQuery.rows.length === 0) {
+      return res.status(404).json({ error: "No SQL found for this menu ID" });
+    }
+
+    const sqlToRun = sqlQuery.rows[0].sql; // ✅ use correct column name
+
+    // 🔒 Safety check → only allow SELECT queries
+    if (!/^select/i.test(sqlToRun.trim())) {
+      return res
+        .status(400)
+        .json({ error: "Only SELECT queries are allowed." });
+    }
+
+    // 2. Execute stored SQL
+    const result = await client.query(sqlToRun);
+
+    // 3. Send back JSON result
+    res.json({
+      menu_id: transid, // ✅ fixed id bug
+      rows: result.rows,
+      count: result.rowCount,
+    });
+  } catch (err) {
+    console.error("Error:", err.message);
+    res.status(500).json({ error: "Database execution error" });
+  } finally {
+    client.release();
+  }
+});
+
+// -------------------- Report SQL ----------------------
+
+app.get("/api/report/:reportslug", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { reportslug } = req.params;
+
+    // 1️⃣ Fetch the stored SQL for this report
+    const sqlQuery = await client.query(
+      "SELECT sql FROM reportsql WHERE reportslug = $1",
+      [reportslug]
+    );
+
+    if (sqlQuery.rows.length === 0) {
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    const reportSQL = sqlQuery.rows[0].sql?.trim();
+
+    if (!reportSQL) {
+      return res.status(400).json({ error: "Stored SQL is empty" });
+    }
+
+    // 🔒 Safety check → only allow SELECT queries
+    if (!/^select\s+/i.test(reportSQL)) {
+      return res.status(400).json({ error: "Only SELECT queries are allowed." });
+    }
+
+    // 2️⃣ Execute the stored query
+    const result = await client.query(reportSQL);
+
+    // 3️⃣ Send back JSON result
+    res.json({
+      reportslug,
+      query: reportSQL,       // helpful for debugging
+      rows: result.rows,
+      count: result.rowCount,
+    });
+ } catch (err) {
+  console.error("❌ Error fetching report:", err); // full error object
+  res.status(500).json({ error: err.message });   // send real DB error
+} finally {
+    client.release();
+  }
+});
+
+
+// app.get("/api/report/:reportslug", async (req, res) => {
+//   const { reportslug } = req.params;
+
+//   try {
+//     // 1️⃣ Get SQL text safely from reports table
+//     const [rows] = await pool.query(
+//       "SELECT sql FROM reportsql WHERE reportslug = $1",
+//       [reportslug]
+//     );
+
+//     if (rows.length === 0) {
+//       return res.status(404).json({ error: "Report not found" });
+//     }
+
+//     const reportSQL = rows[0].sql.trim();  // ✅ correct column name
+
+//     // 2️⃣ Run the stored query
+//     const [result] = await pool.query(reportSQL);
+
+//     // 3️⃣ Return result
+//     res.json({
+//       reportslug,
+//       rows: result,
+//     });
+//   } catch (err) {
+//     console.error("❌ Error fetching report:", err.message);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
