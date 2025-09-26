@@ -1,16 +1,21 @@
-// db.js
-const { Pool } = require('pg');
-require('dotenv').config();
+const mongoose = require("mongoose");
+require("dotenv").config();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    require: true,
-    rejectUnauthorized: false, // Render does not provide CA certs
-  },
-  max: 10, // limit number of clients
-  idleTimeoutMillis: 30000,
-  // OR specify user, host, database, password, port here
-});
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("✅ MongoDB connected successfully");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
+  }
+};
 
-module.exports = pool;
+if (require.main === module) {
+  connectDB(); // run only if executed directly: node db.js
+}
+
+module.exports = connectDB;

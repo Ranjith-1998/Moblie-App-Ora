@@ -39,7 +39,7 @@ async function initDb() {
 
     // Users
     await pool.query(`
-      CREATE TABLE users (  
+      CREATE TABLE IF NOT EXISTS users (  
       id serial4 NOT NULL,
       email text NOT NULL,
       "password" text NOT NULL,
@@ -52,17 +52,18 @@ async function initDb() {
     `);
 
     // reportsql
-    await pool.query(`
-      CREATE TABLE reportsql ( (
-        reportsqlid  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        reportslug bpchar(70) NULL,
-        "sql" text NULL
-      )
-    `);
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS reportsql (
+    reportsqlid  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    reportslug bpchar(70) NULL,
+    "sql" text NULL
+  )
+`);
+
 
     // txmaster
     await pool.query(`
-      CREATE TABLE txmaster (
+      CREATE TABLE IF NOT EXISTS txmaster (
         id serial4 NOT NULL,
         eform_name text NOT NULL,
         dbname text NOT NULL,
@@ -72,7 +73,7 @@ async function initDb() {
 
     // citydetail
     await pool.query(`
-      create table citydetail (
+      create table IF NOT EXISTS citydetail (
         citydetailid  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         stateid  integer,
         cityid varchar(10),
@@ -82,7 +83,7 @@ async function initDb() {
 
     // statedetail
     await pool.query(`
-      create table statedetail (
+      create table IF NOT EXISTS statedetail (
         statedetailid serial primary key,
         posgst  varchar(100),
         statecodegst  varchar(10),
@@ -93,7 +94,7 @@ async function initDb() {
     `);
 
      await pool.query(`
-      create table country (
+      create table IF NOT EXISTS country (
         countrydetailid integer generated always as identity primary key,
         countrycode     varchar(12),
         countryname     varchar(50),
@@ -108,4 +109,4 @@ async function initDb() {
   }
 }
 
-initDb();
+module.exports = initDb;
