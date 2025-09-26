@@ -127,6 +127,32 @@ app.post("/api/create-collection", async (req, res) => {
 });
 
 
+// ---------------- COMMON SAVE API ----------------
+// CREATE
+app.post("/api/save", async (req, res) => {
+  try {
+    const { table, data } = req.body;
+    if (!table || !data) {
+      return res.status(400).json({ error: "Table and data are required" });
+    }
+
+    // Dynamic collection name
+    const Model = mongoose.connection.collection(table);
+
+    // Insert the document
+    const result = await Model.insertOne(data);
+
+    res.status(201).json({
+      message: "Row inserted",
+      data: result.ops ? result.ops[0] : result, // ops in older driver, insertedId in newer
+    });
+  } catch (err) {
+    console.error("Save API error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // ---------------- START SERVER ----------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
