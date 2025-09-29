@@ -4,7 +4,6 @@ const express = require("express");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -17,6 +16,14 @@ mongoose.connect(process.env.MONGO_URI, {
 const db = mongoose.connection;
 db.on("error", console.error.bind(console, "❌ MongoDB connection error:"));
 db.once("open", () => console.log("✅ MongoDB connected"));
+
+{/*// Middlewares
+app.use(
+  cors({
+    origin: "http://localhost:8081", // frontend origin
+    credentials: true, // ✅ allow cookies
+  })
+);*/}
 
 // ---------------- USER MODEL ----------------
 const userSchema = new mongoose.Schema({
