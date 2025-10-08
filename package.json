@@ -20,8 +20,11 @@
     "express": "^5.1.0",
     "ig": "^0.0.5",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.18.2",
-    "pg": "^8.16.3"
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.19.0",
+    "oracledb": "^6.9.0",
+    "pg": "^8.16.3",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

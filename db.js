@@ -1,21 +1,27 @@
-const mongoose = require("mongoose");
+// db.js
 require("dotenv").config();
+const oracledb = require("oracledb");
 
-const connectDB = async () => {
+let pool;
+
+async function connectDB() {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+    pool = await oracledb.createPool({
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      connectString: process.env.DB_CONNECT, // e.g. localhost/XEPDB1
     });
-    console.log("✅ MongoDB connected successfully");
+    console.log("✅ Connected to Oracle DB");
   } catch (err) {
-    console.error("❌ MongoDB connection error:", err.message);
-    process.exit(1);
+    console.error("❌ Oracle DB connection error:", err);
   }
-};
-
-if (require.main === module) {
-  connectDB(); // run only if executed directly: node db.js
 }
 
-module.exports = connectDB;
+async function getConnection() {
+  if (!pool) {
+    await connectDB();
+  }
+  return await pool.getConnection();
+}
+
+module.exports = { connectDB, getConnection };
