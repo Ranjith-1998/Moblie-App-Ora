@@ -186,5 +186,49 @@ app.post("/api/read", async (req, res) => {
   }
 });
 
+//  ----------------- EJSONSQL ----------------
+app.get("/api/ejsonsql/:slug", async (req, res) => {
+  try {
+    const token = req.headers["authorization"]?.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "Token missing" });
+
+    // Verify JWT
+    try {
+      jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    const slug = req.params.slug;
+
+    const conn = await getConnection();
+
+    // 1?? Fetch SQL from config table
+    const sqlFetch = `SELECT SQL FROM EJSONSQL WHERE SLUG = :slug`;
+    const result = await conn.execute(sqlFetch, { slug }, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    if (result.rows.length === 0) {
+      await conn.close();
+      return res.status(404).json({ error: "Report not found" });
+    }
+
+    const sqlToRun = result.rows[0].SQL;
+
+    // 2?? Run dynamic SQL
+    const queryResult = await conn.execute(sqlToRun, {}, { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+    await conn.close();
+
+    res.json({
+      slug,
+      data: queryResult.rows
+    });
+
+  } catch (err) {
+    console.error("? ejsonsql API error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------- START SERVER ----------------
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
