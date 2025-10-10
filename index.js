@@ -234,45 +234,36 @@ app.get("/api/ejsonsql/:slug", async (req, res) => {
 app.post("/api/create-table", async (req, res) => {
   let conn;
   try {
-    const { table, schema } = req.body; 
-
-    if (!table) {
-      return res.status(400).json({ error: "Table name is required" });
-    }
-    if (!schema || typeof schema !== "string") {
-      return res.status(400).json({ error: "Schema (CREATE SQL columns) is required" });
-    }
-
-    // ✅ sanitize table name (Oracle supports only letters/numbers/_)
-    const safeTable = table.toUpperCase().replace(/[^A-Z0-9_]/g, "");
-    if (!safeTable) {
-      return res.status(400).json({ error: "Invalid table name" });
+    const { tables } = req.body;
+    if (!tables || !Array.isArray(tables)) {
+      return res.status(400).json({ error: "Tables array is required" });
     }
 
     conn = await getConnection();
+    const results = []; // ✅ remove ': any[]'
 
-    // ✅ check if table exists
-    const check = await conn.execute(
-      `SELECT table_name FROM user_tables WHERE table_name = :t`,
-      [safeTable]
-    );
+    for (const t of tables) {
+      if (!t.table || !t.schema) continue;
 
-    if (check.rows.length > 0) {
-      return res.json({
-        success: true,
-        message: `Table '${safeTable}' already exists`
-      });
+      const safeTable = t.table.toUpperCase().replace(/[^A-Z0-9_]/g, "");
+      if (!safeTable) continue;
+
+      const check = await conn.execute(
+        `SELECT table_name FROM user_tables WHERE table_name = :t`,
+        [safeTable]
+      );
+
+      if (check.rows.length > 0) {
+        results.push({ table: safeTable, message: "already exists" });
+        continue;
+      }
+
+      await conn.execute(`CREATE TABLE ${safeTable} (${t.schema})`);
+      results.push({ table: safeTable, message: "created" });
     }
 
-    // 🚀 create table dynamically
-    const sql = `CREATE TABLE ${safeTable} (${schema})`;
-    await conn.execute(sql);
     await conn.commit();
-
-    res.status(201).json({
-      success: true,
-      message: `Table '${safeTable}' created successfully`
-    });
+    res.status(201).json({ success: true, results });
   } catch (err) {
     console.error("❌ create-table API error:", err);
     res.status(500).json({ error: err.message });
